@@ -3,3 +3,4 @@ Data/station_active.pkl
 .ipynb_checkpoints/
 __MACOSX/
 ._*
+Data/grid_results.pkl
