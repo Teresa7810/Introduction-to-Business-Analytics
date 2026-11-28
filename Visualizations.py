@@ -7,11 +7,15 @@ import pandas as pd
 
 from plotly.subplots import make_subplots
 
+from sklearn.manifold import MDS
 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, silhouette_samples
 from scipy.cluster.hierarchy import dendrogram
+
+from scipy.spatial.distance import pdist
+
 
 
 # Correlation Heatmap
@@ -283,30 +287,41 @@ def create_dendrogram(data, method, threshold = None):
 
     plt.show()
 
-# UMAP
-def UMAP(transformation, targets):
-    """
-    This function generates and displays a UMAP (Uniform Manifold Approximation and Projection) plot for visualizing 
-    high-dimensional data.
 
-    Parameters:
-        transformation(numpy.ndarray): The transformed data obtained from UMAP.
-        targets(array-like): The target labels or categories corresponding to each data point.
+def mds_embedding(X, n_samples=3000, seed=42):
+    """2-D metric MDS of (a random subsample of) X.
+    Returns the embedding, the row positions used, and Kruskal stress-1."""
+    rng = np.random.default_rng(seed)
+    idx = np.sort(rng.choice(len(X), size=min(n_samples, len(X)), replace=False))
+    Xs = X.iloc[idx] if hasattr(X, "iloc") else X[idx]
 
-    Returns:
-        None: The function displays the UMAP plot and does not return any value.
-    """
-    plt.figure(figsize = (15, 12))
-    
-    labels, targets_categorical = np.unique(targets, return_inverse = True)
+    mds = MDS(n_components=2, n_init=1, max_iter=300, random_state=seed)
+    emb = mds.fit_transform(Xs)
 
-    cmap = plt.cm.get_cmap("Spectral")
-    norm = plt.Normalize(vmin = 0, vmax = len(labels) - 1)
-    plt.scatter(transformation[:, 0], transformation[:, 1], c = targets_categorical, cmap = cmap, norm = norm)
+    # Kruskal stress-1: sqrt( sum (d_orig - d_2D)^2 / sum d_orig^2 )
+    d_orig = pdist(np.asarray(Xs))
+    d_2d = pdist(emb)
+    stress1 = np.sqrt(((d_orig - d_2d) ** 2).sum() / (d_orig ** 2).sum())
+    return emb, idx, stress1
 
-    handles = [plt.scatter([], [], c = cmap(norm(i)), label = label) for i, label in enumerate(labels)]
-    plt.legend(handles = handles, title = 'Clusters')
+def mds_scatter(embedding, labels, title="MDS", stress=None, cmap_name="Spectral"):
+    """Scatter plot of a 2-D MDS embedding coloured by cluster label."""
+    labels = np.asarray(labels)
+    classes = np.unique(labels)
+    cmap = plt.get_cmap(cmap_name)
 
-    # Display the plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for i, c in enumerate(classes):
+        mask = labels == c
+        name = "Noise" if c == -1 else f"Cluster {c}"
+        colour = "lightgrey" if c == -1 else cmap(i / max(len(classes) - 1, 1))
+        ax.scatter(embedding[mask, 0], embedding[mask, 1], s=12, alpha=0.6,
+                   color=colour, label=f"{name} (n={mask.sum()})")
+
+    ax.set_xlabel("MDS 1")
+    ax.set_ylabel("MDS 2")
+    ax.set_title(title + (f"  |  normalized stress = {stress:.3f}" if stress is not None else ""))
+    ax.legend(title="Clusters", markerscale=2)
+    plt.tight_layout()
     plt.show()
 
